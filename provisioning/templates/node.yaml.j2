@@ -1,0 +1,7 @@
+apiVersion: kubeadm.k8s.io/v1alpha1
+kind: NodeConfiguration
+discoveryTokenAPIServers:
+  - "{{ masterIp }}:6443"
+nodeName: "{{ ansible_hostname }}"
+token: "{{ discoveryToken }}"
+discoveryTokenUnsafeSkipCAVerification: True

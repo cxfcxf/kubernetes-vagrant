@@ -1,0 +1,111 @@
+---
+- hosts: all
+  remote_user: vargant
+  become: True
+
+  tasks:
+    - name: install stuff
+      yum:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - epel-release
+    - name: disable firewall
+      service:
+        name: firewalld
+        state: stopped
+        enabled: False
+    - name: disable selinux
+      selinux:
+        state: disabled
+    - name: hosts control
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ item }}"
+      with_items:
+        - "{{ hostsLine }}"
+    - name: load br_netfilter module
+      modprobe:
+        name: br_netfilter
+        state: present
+    - name: sysctl changes
+      sysctl:
+        name: net.bridge.bridge-nf-call-iptables
+        value: 1
+        state: present
+    - name: turnoff swap
+      mount:
+        name: swap
+        fstype: swap
+        state: absent
+    - name: Disable swap
+      command: swapoff -a
+      when: ansible_swaptotal_mb > 0
+    - name: create external repos
+      copy:
+        src: kubernetes.repo
+        dest: /etc/yum.repos.d/kubernetes.repo
+        owner: root
+        group: root
+        mode: 0644
+    - name: install kubernetes and docker
+      yum:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - docker
+        - kubeadm
+    - name: make sure docker and kubernetes runs
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: True
+      with_items:
+        - docker
+        - kubelet
+    - name: render master bootstrap config file
+      template:
+        src: master.yaml.j2
+        dest: /tmp/master.yaml
+        mode: 0644
+      when: '"master" in ansible_hostname'
+    - name: bootstrap kubemaster
+      shell: /bin/kubeadm init --config /tmp/master.yaml
+      when: '"master" in ansible_hostname'
+    - name: create .kube for user
+      file:
+        path: /root/.kube
+        owner: root
+        group: root
+        state: directory
+      when: '"master" in ansible_hostname'
+    - name: copy admin.conf
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: True
+      when: '"master" in ansible_hostname'
+    - name: create pod network
+      shell: /bin/kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
+      when: '"master" in ansible_hostname'
+    - name: add a route for node to connect to master api
+      shell: /sbin/ip route add 10.96.0.0/24 dev eth1
+      when: '"agent" in ansible_hostname'
+    - name: render node bootstrap config file
+      template:
+        src: node.yaml.j2
+        dest: /tmp/node.yaml
+        mode: 0644
+      when: '"agent" in ansible_hostname'
+    - name: bootstrap kubeagent
+      shell: /bin/kubeadm join --config /tmp/node.yaml
+      when: '"agent" in ansible_hostname'
+    - name: clean up bootstrap file
+      file:
+        path: "/tmp/{{ item }}.yaml"
+        state: absent
+      with_items:
+        - "master"
+        - "node"
+
+

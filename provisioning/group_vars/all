@@ -1,0 +1,7 @@
+---
+masterIp: 172.16.0.21
+discoveryToken: 7b8592.61397944d533f746
+hostsLine:
+  - "172.16.0.21 kubimaster.hdp.com  master"
+  - "172.16.0.22 kubeagent-one.hdp.com  kubeagent-one"
+  - "172.16.0.23 kubeagent-two.hdp.com  kubeagent-two"
